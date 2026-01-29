@@ -4,31 +4,118 @@ import { execSync } from "child_process";
 
 export type ThinkingMode = "low" | "medium" | "high";
 
+// Map of provider IDs to their required env variable names
+export const PROVIDER_API_KEYS: Record<string, string> = {
+  google: "GOOGLE_API_KEY",
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  xai: "XAI_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+};
+
+// Providers that don't require API keys (free via OpenCode Zen)
+export const FREE_PROVIDERS = ["zai", "opencode"];
+
 export class SupportAgent {
   private client: OpencodeClient | null = null;
   private serverProc: any | null = null;
   private currentMode: ThinkingMode = "medium";
+  private currentModel: string = "google/gemini-2.5-flash"; // Default model
 
-  // Model configurations for different modes
-  private models = {
-    low: "google/gemini-2.5-flash",
-    medium: "google/gemini-3-flash-preview",
-    high: "google/gemini-3-pro-preview",
+  // Thinking mode affects reasoning effort, not model selection
+  // low = fast responses, medium = balanced, high = deep reasoning
+  private thinkingConfig = {
+    low: { reasoningEffort: "low", budgetTokens: 4000 },
+    medium: { reasoningEffort: "medium", budgetTokens: 8000 },
+    high: { reasoningEffort: "high", budgetTokens: 16000 },
   };
 
   // Whitelist of providers to show
   private allowedProviders = [
+    // Free providers (no API key required)
+    "zai", // GLM 4.7 (free)
+    "opencode", // Big Pickle, Kimi, MiniMax (free)
+    // Paid providers (require API key)
     "google",
     "openai",
-    "zai", // GLM-4.7
-    "deepseek", // DeepSeek R1/V3
-    "xai", // Grok
-    "alibaba", // Qwen
-    "mistral", // Mistral Large
-    "llama", // Meta Llama
+    "deepseek",
+    "xai",
+    "anthropic",
+    "mistral",
+  ];
+
+  // Model name patterns to exclude (embedding, audio, nano, deprecated, etc.)
+  private excludedModelPatterns = [
+    /embedding/i,
+    /tts/i, // text-to-speech
+    /audio/i,
+    /live/i,
+    /image/i,
+    /nano/i,
+    /-8b$/i, // small models like gemini-1.5-flash-8b
+    /lite/i,
+    /gemini-1\./i, // exclude Gemini 1.x (deprecated)
+    /gemini-2\.0/i, // exclude Gemini 2.0 (use 2.5+)
+    /-latest$/i, // exclude -latest aliases
   ];
 
   constructor() {}
+
+  /**
+   * Returns the currently active model string.
+   */
+  getCurrentModel(): string {
+    return this.currentModel;
+  }
+
+  /**
+   * Returns the current thinking mode.
+   */
+  getCurrentMode(): ThinkingMode {
+    return this.currentMode;
+  }
+
+  /**
+   * Checks if a provider requires an API key.
+   */
+  requiresApiKey(providerId: string): boolean {
+    return !FREE_PROVIDERS.includes(providerId);
+  }
+
+  /**
+   * Gets the environment variable name for a provider's API key.
+   */
+  getApiKeyEnvVar(providerId: string): string | undefined {
+    return PROVIDER_API_KEYS[providerId];
+  }
+
+  /**
+   * Checks if an API key is set for a provider.
+   */
+  hasApiKey(providerId: string): boolean {
+    const envVar = PROVIDER_API_KEYS[providerId];
+    return envVar ? !!process.env[envVar] : true;
+  }
+
+  /**
+   * Sets the current model.
+   */
+  setModel(modelString: string) {
+    this.currentModel = modelString;
+    console.log(`Model set to: ${modelString}`);
+  }
+
+  /**
+   * Filters out irrelevant models (embedding, audio, etc.)
+   */
+  filterModels(models: Record<string, any>): string[] {
+    return Object.keys(models).filter((modelId) => {
+      return !this.excludedModelPatterns.some((pattern) =>
+        pattern.test(modelId),
+      );
+    });
+  }
 
   /**
    * Returns a list of available providers and their models.
@@ -55,17 +142,6 @@ export class SupportAgent {
         this.allowedProviders.indexOf(b.id)
       );
     });
-  }
-
-  /**
-   * Sets the model explicitly, overriding the mode-based default.
-   */
-  async setModel(modelString: string) {
-    // Allow raw string for now, could validate against available models
-    // Hack: Update "medium" mode to use this model temporarily so query() uses it
-    // A better way would be to have a separate currentModel property that overrides modes
-    this.models[this.currentMode] = modelString;
-    console.log(`Model set to: ${modelString}`);
   }
 
   private killPort(port: number) {
@@ -96,7 +172,7 @@ export class SupportAgent {
           // Explicitly disable any config content passed via ENV to avoid huge payloads
           OPENCODE_CONFIG_CONTENT: "{}",
           // Use Google model initially
-          OPENCODE_MODEL: this.models[this.currentMode],
+          OPENCODE_MODEL: this.currentModel,
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -178,7 +254,9 @@ export class SupportAgent {
       // For now assuming we can pass config per request or update global config
       // Verify SDK capabilities in 'opencode' docs if this fails.
       // Assuming re-initialization or config update logic here.
-      console.log(`Switched to ${mode} mode (${this.models[mode]})`);
+      console.log(
+        `Switched to ${mode} thinking mode (reasoning: ${this.thinkingConfig[mode].reasoningEffort})`,
+      );
     }
   }
 
@@ -210,7 +288,7 @@ export class SupportAgent {
     }
 
     // Parse model string "provider/model"
-    const modelString = this.models[this.currentMode];
+    const modelString = this.currentModel;
     const [providerID, modelID] = modelString.split("/");
 
     const payload = {
