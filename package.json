@@ -1,0 +1,19 @@
+{
+  "name": "support-agent",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "opencode-ai": "^1.1.39"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^3.0.16",
+    "@opencode-ai/sdk": "^1.1.39",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3"
+  }
+}

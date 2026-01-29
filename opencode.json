@@ -1,0 +1,29 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  },
+  "agent": {
+    "support": {
+      "mode": "primary",
+      "model": "google/gemini-3-pro-preview",
+      "prompt": "You are a helpful support assistant for developers. Your goal is to reduce their cognitive load by answering clarifications and searching documentation. You have access to Context7 to find information about libraries and code. When a user provides a source in brackets like [source], use Context7 to find info about that source.",
+      "tools": {
+        "mcp": true
+      }
+    }
+  },
+  "provider": {
+    "google": {
+      "id": "google",
+      "npm": "@ai-sdk/google",
+      "env": ["GOOGLE_API_KEY"]
+    }
+  }
+}
