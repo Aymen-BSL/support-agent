@@ -7,11 +7,14 @@
 
 import * as fs from "fs-extra";
 import * as path from "path";
+import * as os from "os";
 import { glob } from "glob";
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 
-const TEMP_REPOS_DIR = path.join(process.cwd(), ".support-agent", "repos");
+// Store repos in user's home directory, not in the project
+const SUPPORT_AGENT_HOME = path.join(os.homedir(), ".support-agent");
+const TEMP_REPOS_DIR = path.join(SUPPORT_AGENT_HOME, "repos");
 const MAX_FILE_SIZE = 100 * 1024; // 100KB max file size to read
 const BINARY_EXTENSIONS = [
   ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".svg",
@@ -303,3 +306,96 @@ export async function readKeyFiles(
 
   return result;
 }
+
+/**
+ * Reads ALL source files from a repository for full context
+ * This is used when the AI doesn't have direct file access
+ * READ-ONLY: Only reads files
+ */
+export async function readAllSourceFiles(
+  repoPath: string,
+  maxTotalSize: number = 500 * 1024 // 500KB total limit
+): Promise<Map<string, string>> {
+  const ignorePatterns = await loadGitignorePatterns(repoPath);
+
+  // Source file extensions we want to include
+  const sourceExtensions = [
+    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+    ".py", ".pyw",
+    ".go",
+    ".rs",
+    ".java", ".kt", ".scala",
+    ".c", ".cpp", ".h", ".hpp",
+    ".cs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".vue", ".svelte",
+    ".json", ".yaml", ".yml", ".toml",
+    ".md", ".txt", ".rst",
+    ".sql",
+    ".sh", ".bash", ".zsh", ".ps1",
+    ".css", ".scss", ".sass", ".less",
+    ".html", ".htm",
+    ".xml",
+    ".env.example",
+    ".gitignore",
+    "Dockerfile",
+    "Makefile",
+  ];
+
+  // Find all files
+  const files = await glob("**/*", {
+    cwd: repoPath,
+    nodir: true,
+    ignore: ignorePatterns,
+    dot: false,
+  });
+
+  const result = new Map<string, string>();
+  let totalSize = 0;
+
+  // Sort files to prioritize important ones
+  const priorityFiles = ["README.md", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
+  files.sort((a, b) => {
+    const aName = path.basename(a);
+    const bName = path.basename(b);
+    const aPriority = priorityFiles.indexOf(aName);
+    const bPriority = priorityFiles.indexOf(bName);
+
+    if (aPriority !== -1 && bPriority === -1) return -1;
+    if (bPriority !== -1 && aPriority === -1) return 1;
+    if (aPriority !== -1 && bPriority !== -1) return aPriority - bPriority;
+    return a.localeCompare(b);
+  });
+
+  for (const file of files) {
+    const ext = path.extname(file).toLowerCase();
+    const basename = path.basename(file);
+
+    // Check if it's a source file or special file
+    const isSource = sourceExtensions.includes(ext) ||
+      sourceExtensions.includes(basename) ||
+      basename === "Dockerfile" ||
+      basename === "Makefile";
+
+    if (!isSource) continue;
+
+    const content = await getFileContent(repoPath, file);
+    if (content && !content.startsWith("[")) { // Skip binary/too large markers
+      const contentSize = Buffer.byteLength(content, "utf-8");
+
+      if (totalSize + contentSize > maxTotalSize) {
+        console.log(`  Reached size limit, skipping remaining files...`);
+        break;
+      }
+
+      result.set(file, content);
+      totalSize += contentSize;
+    }
+  }
+
+  console.log(`  Loaded ${result.size} source files (${(totalSize / 1024).toFixed(1)}KB)`);
+  return result;
+}
+

@@ -17,7 +17,7 @@ import {
 import { parseInput } from "./utils";
 import {
   loadRepository,
-  readKeyFiles,
+  readAllSourceFiles,
   saveSession,
   loadSession as loadSessionFromStore,
   listSessions,
@@ -275,13 +275,13 @@ export async function handleLoadCommand(
 
   try {
     const result = await loadRepository(args);
-    const keyFiles = await readKeyFiles(result.path);
+    const sourceFiles = await readAllSourceFiles(result.path);
 
     session.repoContext = {
       path: result.path,
       name: result.name,
       map: result.repoMap,
-      keyFiles,
+      keyFiles: sourceFiles,
     };
 
     console.log(`\n✓ Repository loaded: ${result.name}`);
@@ -353,13 +353,13 @@ export async function handleResumeCommand(
     console.log(`Restoring repository context: ${savedSession.repoName}...`);
     try {
       const result = await loadRepository(savedSession.repoPath);
-      const keyFiles = await readKeyFiles(result.path);
+      const sourceFiles = await readAllSourceFiles(result.path);
 
       session.repoContext = {
         path: result.path,
         name: result.name,
         map: result.repoMap,
-        keyFiles,
+        keyFiles: sourceFiles,
       };
 
       console.log(`✓ Repository context restored: ${result.name}`);

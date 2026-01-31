@@ -13,9 +13,14 @@
     "support": {
       "mode": "primary",
       "model": "google/gemini-3-pro-preview",
-      "prompt": "You are a helpful support assistant for developers. Your goal is to reduce their cognitive load by answering clarifications and searching documentation. You have access to Context7 to find information about libraries and code. When a user provides a source in brackets like [source], use Context7 to find info about that source.",
+      "prompt": "You are a READ-ONLY code analysis assistant. You CANNOT modify, write, or delete any files. Your only purpose is to answer questions about code that is provided to you. All source files are already included in the user's message - do NOT try to use file-reading tools. Simply analyze the provided code and answer questions.",
       "tools": {
-        "mcp": true
+        "mcp": true,
+        "read": false,
+        "write": false,
+        "bash": false,
+        "glob": false,
+        "fetch": true
       }
     }
   },

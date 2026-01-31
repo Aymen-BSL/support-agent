@@ -6,8 +6,10 @@
 
 import * as fs from "fs-extra";
 import * as path from "path";
+import * as os from "os";
 
-const SESSIONS_DIR = path.join(process.cwd(), ".support-agent");
+// Store sessions in user's home directory, not in the project
+const SESSIONS_DIR = path.join(os.homedir(), ".support-agent");
 const SESSIONS_FILE = path.join(SESSIONS_DIR, "sessions.json");
 
 /**
