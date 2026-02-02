@@ -72,6 +72,3 @@ Session data and cached repositories are stored in `.support-agent/`:
 
 This directory is git-ignored by default.
 
----
-
-This project was created using `bun init` in bun v1.3.6. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
