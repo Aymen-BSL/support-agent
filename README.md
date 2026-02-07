@@ -51,7 +51,7 @@ bun run query --repo <path|url> "Your question here"
 |------|-------------|
 | `-r, --repo <path>` | **Required.** Local path or Git URL to repository |
 | `-j, --json` | Output structured JSON response |
-| `-m, --model <model>` | Specify model (default: `google/gemini-2.0-flash`) |
+| `-m, --model <model>` | Specify model (default: `google/gemini-3.0-flash`) |
 | `-q, --quiet` | Suppress progress messages, output only the answer |
 
 #### Examples
