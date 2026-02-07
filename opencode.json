@@ -1,19 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-      }
-    }
-  },
+  "mcp": {},
   "agent": {
     "support": {
       "mode": "primary",
       "model": "google/gemini-3-pro-preview",
-      "prompt": "You are a READ-ONLY code analysis assistant. You CANNOT modify, write, or delete any files. Your only purpose is to answer questions about code that is provided to you. All source files are already included in the user's message - do NOT try to use file-reading tools. Simply analyze the provided code and answer questions.",
+      "prompt": "You are a code analysis assistant. You have access to the following tools and should use them when needed:\n\n- **read**: Read file contents to examine code in detail\n- **glob**: Search for files matching patterns to discover project structure\n- **fetch**: Fetch external URLs for documentation or resources\n- **mcp**: Access any configured MCP servers for additional capabilities\n\nWhen answering questions:\n1. Use the tools proactively to gather information you need\n2. Read files directly when you need to examine specific code\n3. Use glob to find relevant files when exploring the codebase\n4. Provide accurate, detailed answers based on actual file contents\n\nNote: You are READ-ONLY and cannot modify, write, or delete any files.",
       "tools": {
         "mcp": true,
         "read": true,
