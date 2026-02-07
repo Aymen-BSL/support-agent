@@ -54,7 +54,6 @@ export async function spawnServer(
     {
       env: {
         ...process.env,
-        OPENCODE_CONFIG_CONTENT: "{}",
         OPENCODE_MODEL: initialModel,
       },
       stdio: ["ignore", "pipe", "pipe"],
