@@ -190,24 +190,30 @@ export class SupportAgent {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * Creates a promise that rejects after a timeout
+   * Creates an async iterable of events filtered by session ID
+   * Automatically stops when the session becomes idle
    */
-  private timeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`Request timed out after ${ms / 1000}s`));
-      }, ms);
+  private async sessionEvents(
+    sessionID: string,
+    client: OpencodeClient,
+  ): Promise<AsyncIterable<any>> {
+    // Subscribe to OpenCode event stream
+    const events = await client.event.subscribe();
 
-      promise
-        .then((value) => {
-          clearTimeout(timer);
-          resolve(value);
-        })
-        .catch((error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
-    });
+    // Generator that filters events by sessionID
+    async function* gen() {
+      for await (const event of events.stream) {
+        const props = event.properties as any;
+        // Only yield events for this session
+        if (props && "sessionID" in props && props.sessionID !== sessionID)
+          continue;
+        yield event;
+        // Stop when session becomes idle
+        if (event.type === "session.idle" && props?.sessionID === sessionID)
+          return;
+      }
+    }
+    return gen();
   }
 
   /**
@@ -237,15 +243,16 @@ export class SupportAgent {
     // Parse model string "provider/model"
     const [providerID, modelID] = this._currentModel.split("/");
 
-    // Subscribe to events first
-    const events = await this.client.event.subscribe();
+    // Get filtered event stream for this session
+    const sessionEventStream = await this.sessionEvents(
+      this.currentSessionId,
+      this.client,
+    );
 
     // Collect response text from events
     let responseText = "";
-    let sessionCompleted = false;
     let sessionError: string | null = null;
     let tokenUsage: TokenUsage | undefined;
-    const currentSessionId = this.currentSessionId;
 
     // Send the prompt asynchronously
     await this.client.session.promptAsync({
@@ -256,42 +263,18 @@ export class SupportAgent {
       },
     });
 
-    // Set up timeout
-    const timeout = setTimeout(() => {
-      sessionError = "Request timed out after 60s";
-      sessionCompleted = true;
-    }, 60000);
-
     // Start response on new line
     let hasStartedPrinting = false;
 
     try {
-      // Listen for events
-      for await (const event of events.stream) {
-        // Only process events for our session
+      // Listen for events (filtered to this session only)
+      for await (const event of sessionEventStream) {
         const props = event.properties as any;
-
-        if (
-          props?.sessionID !== currentSessionId &&
-          props?.info?.sessionID !== currentSessionId
-        ) {
-          // Skip events for other sessions
-          if (
-            event.type !== "message.part.updated" &&
-            event.type !== "session.idle" &&
-            event.type !== "message.updated"
-          ) {
-            continue;
-          }
-        }
 
         switch (event.type) {
           case "message.part.updated":
             // Handle streaming text updates
-            if (
-              props?.part?.type === "text" &&
-              props?.part?.sessionID === currentSessionId
-            ) {
+            if (props?.part?.type === "text") {
               // Use delta if available, otherwise use full text
               if (props.delta) {
                 if (!hasStartedPrinting) {
@@ -308,12 +291,7 @@ export class SupportAgent {
 
           case "message.updated":
             // Capture token usage from assistant message completion
-            // Structure: props.info.tokens and props.info.cost
-            if (
-              props?.info?.role === "assistant" &&
-              props?.info?.sessionID === currentSessionId &&
-              props?.info?.tokens
-            ) {
+            if (props?.info?.role === "assistant" && props?.info?.tokens) {
               const tokens = props.info.tokens;
               tokenUsage = {
                 inputTokens: tokens.input || tokens.prompt || 0,
@@ -328,27 +306,19 @@ export class SupportAgent {
             }
             break;
 
-          case "session.idle":
-            // Session has completed processing
-            if (props?.sessionID === currentSessionId) {
-              sessionCompleted = true;
-            }
-            break;
-
           case "session.error":
             // Handle errors
-            if (props?.sessionID === currentSessionId || !props?.sessionID) {
-              sessionError =
-                props?.error?.data?.message || "Unknown error occurred";
-              sessionCompleted = true;
-            }
+            sessionError =
+              props?.error?.data?.message || "Unknown error occurred";
+            break;
+
+          case "session.idle":
+            // Session completed - the generator will stop automatically
             break;
         }
-
-        if (sessionCompleted) break;
       }
-    } finally {
-      clearTimeout(timeout);
+    } catch (error) {
+      sessionError = error instanceof Error ? error.message : String(error);
     }
 
     if (sessionError) {
