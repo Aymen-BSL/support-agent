@@ -93,26 +93,8 @@ async function runOneShot(question: string, options: OneShotOptions): Promise<vo
 
     // Run the query
     log("Processing query...", quiet);
-    
-    // Suppress streaming output in quiet/json mode
-    const originalWrite = process.stdout.write.bind(process.stdout);
-    let capturedOutput = "";
-    
-    if (quiet || json) {
-      process.stdout.write = (chunk: string | Uint8Array): boolean => {
-        if (typeof chunk === "string") {
-          capturedOutput += chunk;
-        }
-        return true;
-      };
-    }
 
     const queryResult = await agent.query(contextualQuery);
-
-    // Restore stdout
-    if (quiet || json) {
-      process.stdout.write = originalWrite;
-    }
 
     // Clean up
     await agent.stop();

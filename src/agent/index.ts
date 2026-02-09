@@ -201,25 +201,44 @@ export class SupportAgent {
     const events = await client.event.subscribe();
 
     // Generator that filters events by sessionID
+    // Only skip events where sessionID is present but doesn't match
     async function* gen() {
       for await (const event of events.stream) {
         const props = event.properties as any;
-        
-        // Skip events without sessionID property
-        if (!props || !("sessionID" in props)) continue;
-        
-        // Only yield events for this session
-        if (props.sessionID !== sessionID) continue;
-        
+        if (props && "sessionID" in props && props.sessionID !== sessionID)
+          continue;
         yield event;
-        
-        // Stop when session becomes idle
-        if (event.type === "session.idle") {
+        if (
+          event.type === "session.idle" &&
+          (event.properties as any)?.sessionID === sessionID
+        )
           return;
-        }
       }
     }
     return gen();
+  }
+
+  /**
+   * Extracts the final answer text from collected events
+   */
+  private extractAnswerFromEvents(events: any[]): string {
+    const partIds: string[] = [];
+    const partText = new Map<string, string>();
+
+    for (const event of events) {
+      if (event.type !== "message.part.updated") continue;
+      const part: any = (event.properties as any).part;
+      if (!part || part.type !== "text") continue;
+      // Skip user messages
+      if (part.role === "user") continue;
+      if (!partIds.includes(part.id)) partIds.push(part.id);
+      partText.set(part.id, String(part.text ?? ""));
+    }
+
+    return partIds
+      .map((id) => partText.get(id) ?? "")
+      .join("")
+      .trim();
   }
 
   /**
@@ -250,54 +269,35 @@ export class SupportAgent {
     const [providerID, modelID] = this._currentModel.split("/");
 
     // Get filtered event stream for this session
-    const sessionEventStream = await this.sessionEvents(
+    const eventStream = await this.sessionEvents(
       this.currentSessionId,
       this.client,
     );
 
-    // Collect response text from events
-    let responseText = "";
+    // Fire the prompt (non-blocking, like the reference implementation)
+    void this.client.session
+      .prompt({
+        path: { id: this.currentSessionId },
+        body: {
+          model: { providerID: providerID!, modelID: modelID! },
+          parts: [{ type: "text" as const, text: fullQuery }],
+        },
+      })
+      .catch((error: unknown) => {
+        // Errors will surface through session.error events
+      });
+
+    // Collect all events and extract the answer
     let sessionError: string | null = null;
     let tokenUsage: TokenUsage | undefined;
-
-    // Send the prompt asynchronously
-    await this.client.session.promptAsync({
-      path: { id: this.currentSessionId },
-      body: {
-        model: { providerID: providerID!, modelID: modelID! },
-        parts: [{ type: "text" as const, text: fullQuery }],
-      },
-    });
-
-    // Start response on new line
-    let hasStartedPrinting = false;
+    const collectedEvents: any[] = [];
 
     try {
-      // Listen for events (filtered to this session only)
-      for await (const event of sessionEventStream) {
+      for await (const event of eventStream) {
         const props = event.properties as any;
+        collectedEvents.push(event);
 
         switch (event.type) {
-          case "message.part.updated":
-            // Handle streaming text updates - ONLY for assistant messages
-            if (
-              props?.part?.type === "text" &&
-              props?.part?.role === "assistant"
-            ) {
-              // Use delta if available, otherwise use full text
-              if (props.delta) {
-                if (!hasStartedPrinting) {
-                  process.stdout.write("\n"); // Start on new line
-                  hasStartedPrinting = true;
-                }
-                responseText += props.delta;
-                process.stdout.write(props.delta); // Stream to console
-              } else if (props.part.text && responseText === "") {
-                responseText = props.part.text;
-              }
-            }
-            break;
-
           case "message.updated":
             // Capture token usage from assistant message completion
             if (props?.info?.role === "assistant" && props?.info?.tokens) {
@@ -308,7 +308,6 @@ export class SupportAgent {
                 totalTokens:
                   tokens.total || (tokens.input || 0) + (tokens.output || 0),
               };
-              // Also capture cost if available
               if (props.info.cost) {
                 (tokenUsage as any).cost = props.info.cost;
               }
@@ -316,13 +315,10 @@ export class SupportAgent {
             break;
 
           case "session.error":
-            // Handle errors
             sessionError =
-              props?.error?.data?.message || "Unknown error occurred";
-            break;
-
-          case "session.idle":
-            // Session completed - the generator will stop automatically
+              props?.error?.data?.message ||
+              props?.error?.name ||
+              "Unknown error occurred";
             break;
         }
       }
@@ -333,6 +329,9 @@ export class SupportAgent {
     if (sessionError) {
       throw new Error(sessionError);
     }
+
+    // Extract the final answer from collected events
+    const responseText = this.extractAnswerFromEvents(collectedEvents);
 
     return {
       response: responseText || "(No response received)",
