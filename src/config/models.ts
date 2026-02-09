@@ -8,8 +8,10 @@ import type { ThinkingConfig, ThinkingMode } from "../types";
 
 /**
  * Default model to use when starting the agent
+ * Can be overridden by MODEL environment variable
+ * If not set (empty string), the OpenCode server will choose its default model
  */
-export const DEFAULT_MODEL = "google/gemini-2.5-flash";
+export const DEFAULT_MODEL = process.env.MODEL || "google/gemini-3-flash";
 
 /**
  * Default thinking mode

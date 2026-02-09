@@ -20,20 +20,25 @@ export const PROVIDER_API_KEYS: Record<string, string> = {
 };
 
 /**
- * Free models available through OpenCode (no API key required)
- * These are truly free - no billing or API key setup needed
+ * Free models available through the connected OpenCode server
+ * These are available through the firmware provider (no API key required)
  */
 export const FREE_MODELS = [
-  "opencode/glm-4.7-free", // GLM 4.7 Free - No API key required
-  "opencode/kimi-k2.5-free", // Kimi 2.5 Free - No API key required
+  "firmware/gpt-5-nano",
+  "firmware/gpt-5-mini",
+  "firmware/claude-haiku-4-5",
+  "firmware/gemini-3-flash-preview",
 ];
 
 /**
  * Ordered whitelist of providers to display
- * OpenCode is first since it has free models
+ * firmware provider has free models (no API key required)
  */
 export const ALLOWED_PROVIDERS = [
-  "opencode", // Has truly free models (no API key required)
+  "firmware", // Has free models (no API key required)
+  "privatemode-ai", // Local custom models
+  "moonshotai-cn", // Moonshot/Kimi models
+  "nova", // Amazon Nova models
   "google",
   "openai",
   "deepseek",
@@ -47,9 +52,26 @@ export const ALLOWED_PROVIDERS = [
  * Only show curated, high-quality models
  */
 export const RECOMMENDED_MODELS: Record<string, string[]> = {
-  opencode: [
-    "glm-4.7-free", // FREE - No API key required
-    "kimi-k2.5-free", // FREE - No API key required
+  firmware: [
+    "gpt-5-nano", // FREE
+    "gpt-5-mini", // FREE
+    "claude-haiku-4-5", // FREE
+    "gemini-3-flash-preview", // FREE
+    "gemini-2.5-flash", // FREE
+    "claude-sonnet-4-5", // FREE
+  ],
+  "privatemode-ai": [
+    "gpt-oss-120b",
+    "gemma-3-27b",
+    "qwen3-coder-30b-a3b",
+  ],
+  "moonshotai-cn": [
+    "kimi-k2.5",
+    "kimi-k2-thinking",
+  ],
+  nova: [
+    "nova-2-pro-v1",
+    "nova-2-lite-v1",
   ],
   google: [
     "gemini-2.5-flash",
@@ -66,11 +88,11 @@ export const RECOMMENDED_MODELS: Record<string, string[]> = {
 
 /**
  * Checks if a provider requires an API key
- * OpenCode doesn't require an API key for its free models
+ * firmware, privatemode-ai don't require an API key
  */
 export function requiresApiKey(providerId: string): boolean {
-  // OpenCode has free models that don't require an API key
-  if (providerId === "opencode") {
+  // These providers have free/local models that don't require an API key
+  if (providerId === "firmware" || providerId === "privatemode-ai") {
     return false;
   }
   return providerId in PROVIDER_API_KEYS;
@@ -87,8 +109,8 @@ export function getApiKeyEnvVar(providerId: string): string | undefined {
  * Checks if an API key is set for a provider
  */
 export function hasApiKey(providerId: string): boolean {
-  // OpenCode free models don't need an API key
-  if (providerId === "opencode") {
+  // firmware and privatemode-ai free/local models don't need an API key
+  if (providerId === "firmware" || providerId === "privatemode-ai") {
     return true; // Always "has" key since none is needed
   }
   const envVar = PROVIDER_API_KEYS[providerId];

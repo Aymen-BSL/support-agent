@@ -20,14 +20,12 @@ import {
   THINKING_CONFIGS,
   filterModels,
 } from "../config";
-import { spawnServer, stopServer } from "./server";
 
 /**
  * SupportAgent manages AI model interactions
  */
 export class SupportAgent {
   private client: OpencodeClient | null = null;
-  private serverProc: ReturnType<typeof Bun.spawn> | null = null;
   private currentSessionId: string | null = null;
   private repositoryPath: string | null = null;
 
@@ -147,16 +145,17 @@ export class SupportAgent {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * Starts the OpenCode server and initializes the client
-   * The server runs in the support-agent directory, but the client's 'directory'
-   * parameter tells OpenCode which repository to work with.
+   * Starts the OpenCode client and connects to the existing OpenCode server
+   * The server URL is read from the OPENCODE_URL environment variable.
    */
   async start(): Promise<void> {
-    const { process, url } = await spawnServer(this._currentModel);
-    this.serverProc = process;
+    const serverUrl = process.env.OPENCODE_URL;
+    if (!serverUrl) {
+      throw new Error("OPENCODE_URL environment variable is not set");
+    }
 
     this.client = createOpencodeClient({
-      baseUrl: url,
+      baseUrl: serverUrl,
       directory: this.repositoryPath || undefined,
     });
 
@@ -164,25 +163,23 @@ export class SupportAgent {
   }
 
   /**
-   * Stops the server and cleans up resources
+   * Cleans up client resources
    */
   async stop(): Promise<void> {
-    await stopServer(this.serverProc);
-    this.serverProc = null;
     this.client = null;
     this.currentSessionId = null;
     // Note: We keep repositoryPath so it can be reused on restart
   }
 
   /**
-   * Restarts the server (needed after setting new API keys)
-   * This ensures the server picks up new environment variables
+   * Restarts the client (needed after setting new API keys)
+   * This reconnects to the OpenCode server which should pick up new environment variables
    */
   async restart(): Promise<void> {
-    console.log("Restarting server to apply new configuration...");
+    console.log("Restarting client to apply new configuration...");
     await this.stop();
     await this.start();
-    console.log("Server restarted successfully.");
+    console.log("Client restarted successfully.");
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -281,15 +278,87 @@ export class SupportAgent {
 
     // Ensure we have a session
     if (!this.currentSessionId) {
-      const result = await this.client.session.create();
+      const result = await this.client.session.create({
+        query: {
+          directory: this.repositoryPath || undefined,
+        },
+        body: {
+          config: {
+            agent: {
+              build: { disable: true },
+              explore: { disable: true },
+              general: { disable: true },
+              plan: { disable: true },
+              supportAgent: {
+                prompt: "You are a support agent for analyzing codebases. Use the REPL tool to read files and process data. The REPL provides read-only functions: main.read({filePath}), main.glob(pattern), main.grep(pattern), and main.list(). Use these REPL functions to explore code, never use bash, write, edit, or other modification tools.",
+                description: "Read-only codebase analysis agent using REPL",
+                mode: "primary",
+                tools: {
+                  // Disable all write/modify tools
+                  bash: false,
+                  write: false,
+                  edit: false,
+                  apply_patch: false,
+                  delete: false,
+                  codesearch: false,
+                  websearch: false,
+                  webfetch: false,
+                  skill: false,
+                  task: false,
+                  mcp: false,
+                  path: false,
+                  // Disable direct read tools (REPL provides its own)
+                  read: false,
+                  grep: false,
+                  glob: false,
+                  list: false,
+                  // Enable todo tools
+                  todowrite: true,
+                  todoread: true,
+                  // Enable REPL (provides sandboxed read access)
+                  repl: true,
+                },
+                permission: {
+                  "*": "deny",
+                  repl: "allow",
+                  todowrite: "allow",
+                  todoread: "allow",
+                },
+              },
+            },
+            experimental: {
+              repl: {
+                ws_url: "ws://localhost:9733",
+                // In REPL, exclude write tools
+                exclude_tools: [
+                  "bash",
+                  "write",
+                  "edit",
+                  "apply_patch",
+                  "delete",
+                  "webfetch",
+                  "websearch",
+                  "codesearch",
+                  "task",
+                  "question",
+                  "skill",
+                  "batch",
+                  "plan*",
+                  "lsp",
+                  "mcp",
+                  "todo*",
+                ],
+                timeout: 60000,
+              },
+            },
+          },
+        } as any, // Type system doesn't have full config schema yet
+      });
       if (!result.data) {
         throw new Error("Failed to create session");
       }
       this.currentSessionId = result.data.id;
     }
-
-    // Parse model string "provider/model"
-    const [providerID, modelID] = this._currentModel.split("/");
 
     // Get filtered event stream for this session
     const eventStream = await this.sessionEvents(
@@ -297,14 +366,24 @@ export class SupportAgent {
       this.client,
     );
 
+    // Build prompt body
+    // If MODEL env var is set, parse and pass it; otherwise let server choose default
+    const promptBody: any = {
+      parts: [{ type: "text" as const, text: fullQuery }],
+    };
+
+    if (this._currentModel) {
+      const [providerID, modelID] = this._currentModel.split("/");
+      if (providerID && modelID) {
+        promptBody.model = { providerID, modelID };
+      }
+    }
+
     // Fire the prompt (non-blocking, like the reference implementation)
     void this.client.session
       .prompt({
         path: { id: this.currentSessionId },
-        body: {
-          model: { providerID: providerID!, modelID: modelID! },
-          parts: [{ type: "text" as const, text: fullQuery }],
-        },
+        body: promptBody,
       })
       .catch((error: unknown) => {
         // Errors will surface through session.error events
