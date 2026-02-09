@@ -116,6 +116,9 @@ async function runOneShot(question: string, options: OneShotOptions): Promise<vo
     }
 
     outputResult(response, json);
+    
+    // Force exit after output (workaround for hanging event stream)
+    process.exit(0);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     

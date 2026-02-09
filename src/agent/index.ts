@@ -198,21 +198,26 @@ export class SupportAgent {
     client: OpencodeClient,
   ): Promise<AsyncIterable<any>> {
     // Subscribe to OpenCode event stream
-    const events = await client.event.subscribe();
+    const subscription = await client.event.subscribe();
 
     // Generator that filters events by sessionID
-    // Only skip events where sessionID is present but doesn't match
     async function* gen() {
-      for await (const event of events.stream) {
+      for await (const event of subscription.stream) {
         const props = event.properties as any;
+        
+        // Only yield events for this session
         if (props && "sessionID" in props && props.sessionID !== sessionID)
           continue;
+        
+        // Check if session is idle BEFORE yielding
+        const isIdle = event.type === "session.idle" && props?.sessionID === sessionID;
+        
         yield event;
-        if (
-          event.type === "session.idle" &&
-          (event.properties as any)?.sessionID === sessionID
-        )
-          return;
+        
+        // After yielding the idle event, stop immediately
+        if (isIdle) {
+          break; // Break from the for-await loop
+        }
       }
     }
     return gen();
@@ -220,8 +225,21 @@ export class SupportAgent {
 
   /**
    * Extracts the final answer text from collected events
+   * Links message parts to their parent messages to determine role
    */
   private extractAnswerFromEvents(events: any[]): string {
+    // First pass: build a map of messageID -> role
+    const messageRoles = new Map<string, string>();
+    for (const event of events) {
+      if (event.type === "message.updated") {
+        const info = (event.properties as any)?.info;
+        if (info?.id && info?.role) {
+          messageRoles.set(info.id, info.role);
+        }
+      }
+    }
+
+    // Second pass: extract text from parts that belong to assistant messages
     const partIds: string[] = [];
     const partText = new Map<string, string>();
 
@@ -229,8 +247,13 @@ export class SupportAgent {
       if (event.type !== "message.part.updated") continue;
       const part: any = (event.properties as any).part;
       if (!part || part.type !== "text") continue;
-      // Skip user messages
-      if (part.role === "user") continue;
+
+      // Get the role from the message this part belongs to
+      const messageRole = part.messageID ? messageRoles.get(part.messageID) : undefined;
+
+      // Only include assistant messages
+      if (messageRole !== "assistant") continue;
+
       if (!partIds.includes(part.id)) partIds.push(part.id);
       partText.set(part.id, String(part.text ?? ""));
     }
@@ -287,7 +310,7 @@ export class SupportAgent {
         // Errors will surface through session.error events
       });
 
-    // Collect all events and extract the answer
+     // Collect all events and extract the answer
     let sessionError: string | null = null;
     let tokenUsage: TokenUsage | undefined;
     const collectedEvents: any[] = [];
@@ -296,6 +319,9 @@ export class SupportAgent {
       for await (const event of eventStream) {
         const props = event.properties as any;
         collectedEvents.push(event);
+
+        // Check for idle - break immediately after processing this event
+        const isIdle = event.type === "session.idle" && props?.sessionID === this.currentSessionId;
 
         switch (event.type) {
           case "message.updated":
@@ -320,6 +346,11 @@ export class SupportAgent {
               props?.error?.name ||
               "Unknown error occurred";
             break;
+        }
+        
+        // After processing idle event, stop the loop
+        if (isIdle) {
+          break;
         }
       }
     } catch (error) {
