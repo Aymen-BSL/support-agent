@@ -13,7 +13,7 @@ import "dotenv/config";
 import { program } from "commander";
 
 import { SupportAgent } from "./agent";
-import { loadRepository, readAllSourceFiles, buildRepoContext } from "./services";
+import { loadRepository, buildRepoContext } from "./services";
 
 interface OneShotOptions {
   repo: string;
@@ -75,18 +75,20 @@ async function runOneShot(question: string, options: OneShotOptions): Promise<vo
     if (model) {
       agent.setModel(model);
     }
-    
-    await agent.start();
 
     // Load the repository
     log(`Loading repository: ${repo}...`, quiet);
     const result = await loadRepository(repo);
-    const sourceFiles = await readAllSourceFiles(result.path);
 
     log(`Repository loaded: ${result.name} (${result.fileCount} files)`, quiet);
 
+    // Set the repository path for OpenCode to use as working directory
+    agent.setRepositoryPath(result.path);
+    
+    await agent.start();
+
     // Build context and query
-    const repoContext = buildRepoContext(result.name, result.repoMap, sourceFiles);
+    const repoContext = buildRepoContext(result.name, result.repoMap);
     const contextualQuery = `${repoContext}\n\n## User Question\n${question}`;
 
     // Run the query

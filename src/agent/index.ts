@@ -29,6 +29,7 @@ export class SupportAgent {
   private client: OpencodeClient | null = null;
   private serverProc: ReturnType<typeof Bun.spawn> | null = null;
   private currentSessionId: string | null = null;
+  private repositoryPath: string | null = null;
 
   private _currentModel: string = DEFAULT_MODEL;
   private _currentMode: ThinkingMode = DEFAULT_THINKING_MODE;
@@ -99,6 +100,20 @@ export class SupportAgent {
     this.currentSessionId = sessionId;
   }
 
+  /**
+   * Sets the repository path for the OpenCode server
+   */
+  setRepositoryPath(path: string): void {
+    this.repositoryPath = path;
+  }
+
+  /**
+   * Gets the current repository path
+   */
+  getRepositoryPath(): string | null {
+    return this.repositoryPath;
+  }
+
   // ─────────────────────────────────────────────────────────────────
   // Provider Discovery
   // ─────────────────────────────────────────────────────────────────
@@ -133,6 +148,8 @@ export class SupportAgent {
 
   /**
    * Starts the OpenCode server and initializes the client
+   * The server runs in the support-agent directory, but the client's 'directory'
+   * parameter tells OpenCode which repository to work with.
    */
   async start(): Promise<void> {
     const { process, url } = await spawnServer(this._currentModel);
@@ -140,6 +157,7 @@ export class SupportAgent {
 
     this.client = createOpencodeClient({
       baseUrl: url,
+      directory: this.repositoryPath || undefined,
     });
 
     // console.log("Support Agent initialized.");
@@ -153,6 +171,7 @@ export class SupportAgent {
     this.serverProc = null;
     this.client = null;
     this.currentSessionId = null;
+    // Note: We keep repositoryPath so it can be reused on restart
   }
 
   /**

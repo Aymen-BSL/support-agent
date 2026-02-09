@@ -134,7 +134,7 @@ export async function runCLI(): Promise<void> {
 
     if (input.startsWith("/load")) {
       const args = input.slice(5).trim();
-      await handleLoadCommand(args, session);
+      await handleLoadCommand(args, agent, session);
       rl.prompt();
       return;
     }

@@ -76,5 +76,4 @@ export interface RepoContext {
   path: string;
   name: string;
   map: string;
-  keyFiles?: Map<string, string>;
 }

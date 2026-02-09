@@ -32,6 +32,9 @@ export interface ServerSpawnResult {
 
 /**
  * Spawns the OpenCode server and waits for it to be ready
+ * 
+ * Note: The server runs in the support-agent directory (where opencode.json is located).
+ * The repository path is passed to the client via the 'directory' parameter, not via cwd.
  */
 export async function spawnServer(
   initialModel: string,
@@ -90,17 +93,19 @@ export async function spawnServer(
   })();
 
   // Drain stderr to prevent blocking
-  const stderrReader = proc.stderr.getReader();
-  (async () => {
-    try {
-      while (true) {
-        const { done } = await stderrReader.read();
-        if (done) break;
+  if (proc.stderr) {
+    const stderrReader = proc.stderr.getReader();
+    (async () => {
+      try {
+        while (true) {
+          const { done } = await stderrReader.read();
+          if (done) break;
+        }
+      } catch {
+        // Ignore read errors
       }
-    } catch {
-      // Ignore read errors
-    }
-  })();
+    })();
+  }
 
   // Wait for server URL to be detected
   const startTime = Date.now();

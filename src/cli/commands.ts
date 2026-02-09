@@ -23,7 +23,6 @@ import {
 import { parseInput } from "./utils";
 import {
   loadRepository,
-  readAllSourceFiles,
   saveSession,
   loadSession as loadSessionFromStore,
   listSessions,
@@ -253,7 +252,6 @@ export async function handleQuery(
     const repoContextStr = buildRepoContext(
       session.repoContext.name,
       session.repoContext.map,
-      session.repoContext.keyFiles,
     );
     const contextualQuery = `${repoContextStr}\n\n## User Question\n${query}`;
 
@@ -276,6 +274,7 @@ export async function handleQuery(
  */
 export async function handleLoadCommand(
   args: string,
+  agent: SupportAgent,
   session: CLISession,
 ): Promise<void> {
   if (!args) {
@@ -290,14 +289,17 @@ export async function handleLoadCommand(
 
   try {
     const result = await loadRepository(args);
-    const sourceFiles = await readAllSourceFiles(result.path);
 
     session.repoContext = {
       path: result.path,
       name: result.name,
       map: result.repoMap,
-      keyFiles: sourceFiles,
     };
+
+    // Set the repository path on the agent and restart the server
+    agent.setRepositoryPath(result.path);
+    console.log("Restarting OpenCode server with repository path...");
+    await agent.restart();
 
     console.log(`\n✓ Repository loaded: ${result.name}`);
     console.log(`  Files: ${result.fileCount}`);
@@ -368,14 +370,17 @@ export async function handleResumeCommand(
     console.log(`Restoring repository context: ${savedSession.repoName}...`);
     try {
       const result = await loadRepository(savedSession.repoPath);
-      const sourceFiles = await readAllSourceFiles(result.path);
 
       session.repoContext = {
         path: result.path,
         name: result.name,
         map: result.repoMap,
-        keyFiles: sourceFiles,
       };
+
+      // Set the repository path on the agent and restart the server
+      agent.setRepositoryPath(result.path);
+      console.log("Restarting OpenCode server with repository path...");
+      await agent.restart();
 
       console.log(`✓ Repository context restored: ${result.name}`);
     } catch (error) {
