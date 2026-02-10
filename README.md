@@ -205,12 +205,9 @@ Contributions are welcome! To contribute:
 
 ## 📄 License
 
-This project is released under the **MIT License**. :contentReference[oaicite:11]{index=11}
+This project is released under the **MIT License**. 
 
----
 
-If you want, I can also generate **badges (build status / stars / downloads)** and a **Table of Contents** for the README!
-::contentReference[oaicite:12]{index=12}
 ````
 
 [1]: https://github.com/support-agent-org/Delena-AI "GitHub - support-agent-org/Delena-AI"
