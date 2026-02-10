@@ -105,7 +105,7 @@ If the query fails:
   "success": false,
   "error": "Failed to load repository"
 }
-``` :contentReference[oaicite:5]{index=5}
+``` 
 
 ---
 
@@ -126,7 +126,7 @@ Once inside the CLI, use:
 /help                # List commands
 /exit                # Quit
 
-```:contentReference[oaicite:6]{index=6}
+```
 
 ---
 
@@ -141,7 +141,7 @@ Delena-AI stores sessions and cached clones in:
 ````
 
 - `sessions.json`: session metadata  
-- `repos/`: cached cloned repositories :contentReference[oaicite:7]{index=7}
+- `repos/`: cached cloned repositories 
 
 ---
 
@@ -157,7 +157,7 @@ Delena-AI **cannot modify code**. It can:
 Delena-AI **cannot**:
 
 ❌ Write, delete, or modify files  
-❌ Execute system commands :contentReference[oaicite:8]{index=8}
+❌ Execute system commands 
 
 ---
 
@@ -180,14 +180,14 @@ Customize behavior using `opencode.json` settings. Example:
     }
   }
 }
-``` :contentReference[oaicite:9]{index=9}
+``` 
 
 ---
 
 ## 📈 Supported Models & Providers
 
 Delena-AI works with multiple AI backends and models — set via CLI or config.  
-Default is `google/gemini-3.0-flash`, but you can switch to other supported models. :contentReference[oaicite:10]{index=10}
+Default is `google/gemini-3.0-flash`, but you can switch to other supported models. 
 
 ---
 
