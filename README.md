@@ -12,11 +12,17 @@ You can point it at local directories or remote GitHub repositories and **ask qu
 Delena-AI provides:
 
 ✔️ Load local directories or clone remote repositories
+
 ✔️ **Read-only AI exploration** — no modifications to source code ([GitHub][1])
+
 ✔️ Session management (save, resume)
+
 ✔️ Multiple AI models supported
+
 ✔️ Token counting per query
+
 ✔️ One-shot CLI mode for automation and agents
+
 ✔️ JSON output for parsing in scripts or tools ([GitHub][1])
 
 ---
